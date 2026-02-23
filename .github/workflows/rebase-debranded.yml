@@ -1,0 +1,88 @@
+name: Rebase Debranded
+
+on:
+  schedule:
+    - cron: '0 6,18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout debranded branch
+        uses: actions/checkout@v4
+        with:
+          ref: debranded
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/openclaw/openclaw.git
+
+      - name: Fetch upstream main
+        run: git fetch upstream main
+
+      - name: Check if already up-to-date
+        id: check
+        run: |
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
+            echo "Already up-to-date with upstream/main"
+          else
+            echo "up_to_date=false" >> "$GITHUB_OUTPUT"
+            BEHIND=$(git rev-list HEAD..upstream/main --count)
+            echo "Behind upstream/main by ${BEHIND} commits"
+          fi
+
+      - name: Rebase onto upstream/main
+        if: steps.check.outputs.up_to_date == 'false'
+        id: rebase
+        run: |
+          if git rebase upstream/main; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            git rebase --abort
+          fi
+
+      - name: Push rebased branch
+        if: steps.check.outputs.up_to_date == 'false' && steps.rebase.outputs.conflict == 'false'
+        run: git push origin debranded --force-with-lease
+
+      - name: Open conflict issue
+        if: steps.rebase.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_TITLE="Rebase conflict: debranded onto upstream/main"
+          EXISTING=$(gh issue list --state open --search "${ISSUE_TITLE}" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "Open conflict issue #${EXISTING} already exists, skipping"
+            exit 1
+          fi
+          UPSTREAM_SHA=$(git rev-parse upstream/main)
+          DEBRANDED_SHA=$(git rev-parse debranded)
+          gh issue create \
+            --title "${ISSUE_TITLE}" \
+            --body "Automated rebase of \`debranded\` onto \`upstream/main\` failed due to merge conflicts.
+
+          **Upstream HEAD:** \`${UPSTREAM_SHA}\`
+          **Debranded HEAD:** \`${DEBRANDED_SHA}\`
+
+          ### Manual resolution
+          \`\`\`bash
+          cd engine
+          git fetch upstream main
+          git rebase upstream/main
+          # resolve conflicts
+          git push origin debranded --force-with-lease
+          \`\`\`"
+          exit 1
