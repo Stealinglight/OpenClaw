@@ -1,4 +1,4 @@
-import { buildRelayWsUrl, isRetryableReconnectError, reconnectDelayMs } from './background-utils.js'
+import { buildRelayWsUrl, isRetryableReconnectError, reconnectDelayMs, sanitizeHost, DEFAULT_HOST } from './background-utils.js'
 
 const DEFAULT_PORT = 18792
 
@@ -55,6 +55,11 @@ async function getRelayPort() {
   const n = Number.parseInt(String(raw || ''), 10)
   if (!Number.isFinite(n) || n <= 0 || n > 65535) return DEFAULT_PORT
   return n
+}
+
+async function getRelayHost() {
+  const stored = await chrome.storage.local.get(['relayHost'])
+  return sanitizeHost(stored.relayHost)
 }
 
 async function getGatewayToken() {
@@ -133,9 +138,10 @@ async function ensureRelayConnection() {
 
   relayConnectPromise = (async () => {
     const port = await getRelayPort()
+    const host = await getRelayHost()
     const gatewayToken = await getGatewayToken()
-    const httpBase = `http://127.0.0.1:${port}`
-    const wsUrl = await buildRelayWsUrl(port, gatewayToken)
+    const httpBase = `http://${host}:${port}`
+    const wsUrl = await buildRelayWsUrl(port, gatewayToken, host)
 
     // Fast preflight: is the relay server up?
     try {

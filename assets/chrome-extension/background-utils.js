@@ -11,6 +11,15 @@ export function reconnectDelayMs(
   return backoff + Math.max(0, jitterMs) * random();
 }
 
+export const DEFAULT_HOST = "127.0.0.1";
+
+export function sanitizeHost(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return DEFAULT_HOST;
+  // Strip any protocol prefix the user might paste in
+  return trimmed.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+}
+
 export async function deriveRelayToken(gatewayToken, port) {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -28,7 +37,7 @@ export async function deriveRelayToken(gatewayToken, port) {
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function buildRelayWsUrl(port, gatewayToken) {
+export async function buildRelayWsUrl(port, gatewayToken, host) {
   const token = String(gatewayToken || "").trim();
   if (!token) {
     throw new Error(
@@ -36,7 +45,8 @@ export async function buildRelayWsUrl(port, gatewayToken) {
     );
   }
   const relayToken = await deriveRelayToken(token, port);
-  return `ws://127.0.0.1:${port}/extension?token=${encodeURIComponent(relayToken)}`;
+  const relayHost = sanitizeHost(host);
+  return `ws://${relayHost}:${port}/extension?token=${encodeURIComponent(relayToken)}`;
 }
 
 export function isRetryableReconnectError(err) {

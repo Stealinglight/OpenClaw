@@ -4,7 +4,8 @@ function hasCdpVersionShape(data) {
   return !!data && typeof data === 'object' && 'Browser' in data && 'Protocol-Version' in data
 }
 
-export function classifyRelayCheckResponse(res, port) {
+export function classifyRelayCheckResponse(res, port, host) {
+  const relayHost = host || '127.0.0.1'
   if (!res) {
     return { action: 'throw', error: 'No response from service worker' }
   }
@@ -38,10 +39,11 @@ export function classifyRelayCheckResponse(res, port) {
     }
   }
 
-  return { action: 'status', kind: 'ok', message: `Relay reachable and authenticated at http://127.0.0.1:${port}/` }
+  return { action: 'status', kind: 'ok', message: `Relay reachable and authenticated at http://${relayHost}:${port}/` }
 }
 
-export function classifyRelayCheckException(err, port) {
+export function classifyRelayCheckException(err, port, host) {
+  const relayHost = host || '127.0.0.1'
   const message = String(err || '').toLowerCase()
   if (message.includes('json') || message.includes('syntax')) {
     return {
@@ -52,6 +54,6 @@ export function classifyRelayCheckException(err, port) {
 
   return {
     kind: 'error',
-    message: `Relay not reachable/authenticated at http://127.0.0.1:${port}/. Start OpenClaw browser relay and verify token.`,
+    message: `Relay not reachable/authenticated at http://${relayHost}:${port}/. Start OpenClaw browser relay and verify token.`,
   }
 }

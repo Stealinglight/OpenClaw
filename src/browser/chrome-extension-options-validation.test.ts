@@ -19,8 +19,13 @@ type OptionsValidationModule = {
   classifyRelayCheckResponse: (
     res: RelayCheckResponse | null | undefined,
     port: number,
+    host?: string,
   ) => RelayCheckStatus;
-  classifyRelayCheckException: (err: unknown, port: number) => RelayCheckExceptionStatus;
+  classifyRelayCheckException: (
+    err: unknown,
+    port: number,
+    host?: string,
+  ) => RelayCheckExceptionStatus;
 };
 
 const require = createRequire(import.meta.url);
@@ -76,7 +81,7 @@ describe("chrome extension options validation", () => {
     });
   });
 
-  it("maps valid relay json response to success", () => {
+  it("maps valid relay json response to success (default host)", () => {
     const result = classifyRelayCheckResponse(
       {
         status: 200,
@@ -93,6 +98,24 @@ describe("chrome extension options validation", () => {
     });
   });
 
+  it("maps valid relay json response to success (custom host)", () => {
+    const result = classifyRelayCheckResponse(
+      {
+        status: 200,
+        ok: true,
+        contentType: "application/json",
+        json: { Browser: "Chrome/136", "Protocol-Version": "1.3" },
+      },
+      8083,
+      "rb-node",
+    );
+    expect(result).toEqual({
+      action: "status",
+      kind: "ok",
+      message: "Relay reachable and authenticated at http://rb-node:8083/",
+    });
+  });
+
   it("maps syntax/json exceptions to wrong-endpoint error", () => {
     const result = classifyRelayCheckException(new Error("SyntaxError: Unexpected token <"), 18792);
     expect(result).toEqual({
@@ -102,12 +125,25 @@ describe("chrome extension options validation", () => {
     });
   });
 
-  it("maps generic exceptions to relay unreachable error", () => {
+  it("maps generic exceptions to relay unreachable error (default host)", () => {
     const result = classifyRelayCheckException(new Error("TypeError: Failed to fetch"), 18792);
     expect(result).toEqual({
       kind: "error",
       message:
         "Relay not reachable/authenticated at http://127.0.0.1:18792/. Start OpenClaw browser relay and verify token.",
+    });
+  });
+
+  it("maps generic exceptions to relay unreachable error (custom host)", () => {
+    const result = classifyRelayCheckException(
+      new Error("TypeError: Failed to fetch"),
+      8083,
+      "rb-node",
+    );
+    expect(result).toEqual({
+      kind: "error",
+      message:
+        "Relay not reachable/authenticated at http://rb-node:8083/. Start OpenClaw browser relay and verify token.",
     });
   });
 });

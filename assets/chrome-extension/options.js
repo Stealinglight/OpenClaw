@@ -1,4 +1,4 @@
-import { deriveRelayToken } from './background-utils.js'
+import { deriveRelayToken, sanitizeHost, DEFAULT_HOST } from './background-utils.js'
 import { classifyRelayCheckException, classifyRelayCheckResponse } from './options-validation.js'
 
 const DEFAULT_PORT = 18792
@@ -10,10 +10,10 @@ function clampPort(value) {
   return n
 }
 
-function updateRelayUrl(port) {
+function updateRelayUrl(host, port) {
   const el = document.getElementById('relay-url')
   if (!el) return
-  el.textContent = `http://127.0.0.1:${port}/`
+  el.textContent = `http://${host}:${port}/`
 }
 
 function setStatus(kind, message) {
@@ -23,8 +23,8 @@ function setStatus(kind, message) {
   status.textContent = message || ''
 }
 
-async function checkRelayReachable(port, token) {
-  const url = `http://127.0.0.1:${port}/json/version`
+async function checkRelayReachable(host, port, token) {
+  const url = `http://${host}:${port}/json/version`
   const trimmedToken = String(token || '').trim()
   if (!trimmedToken) {
     setStatus('error', 'Gateway token required. Save your gateway token to connect.')
@@ -39,35 +39,40 @@ async function checkRelayReachable(port, token) {
       url,
       token: relayToken,
     })
-    const result = classifyRelayCheckResponse(res, port)
+    const result = classifyRelayCheckResponse(res, port, host)
     if (result.action === 'throw') throw new Error(result.error)
     setStatus(result.kind, result.message)
   } catch (err) {
-    const result = classifyRelayCheckException(err, port)
+    const result = classifyRelayCheckException(err, port, host)
     setStatus(result.kind, result.message)
   }
 }
 
 async function load() {
-  const stored = await chrome.storage.local.get(['relayPort', 'gatewayToken'])
+  const stored = await chrome.storage.local.get(['relayPort', 'relayHost', 'gatewayToken'])
+  const host = sanitizeHost(stored.relayHost)
   const port = clampPort(stored.relayPort)
   const token = String(stored.gatewayToken || '').trim()
+  document.getElementById('host').value = host === DEFAULT_HOST ? '' : host
   document.getElementById('port').value = String(port)
   document.getElementById('token').value = token
-  updateRelayUrl(port)
-  await checkRelayReachable(port, token)
+  updateRelayUrl(host, port)
+  await checkRelayReachable(host, port, token)
 }
 
 async function save() {
+  const hostInput = document.getElementById('host')
   const portInput = document.getElementById('port')
   const tokenInput = document.getElementById('token')
+  const host = sanitizeHost(hostInput.value)
   const port = clampPort(portInput.value)
   const token = String(tokenInput.value || '').trim()
-  await chrome.storage.local.set({ relayPort: port, gatewayToken: token })
+  await chrome.storage.local.set({ relayHost: host, relayPort: port, gatewayToken: token })
+  hostInput.value = host === DEFAULT_HOST ? '' : host
   portInput.value = String(port)
   tokenInput.value = token
-  updateRelayUrl(port)
-  await checkRelayReachable(port, token)
+  updateRelayUrl(host, port)
+  await checkRelayReachable(host, port, token)
 }
 
 document.getElementById('save').addEventListener('click', () => void save())
