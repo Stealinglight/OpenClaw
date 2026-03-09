@@ -61,7 +61,7 @@ jobs:
       - name: Open conflict issue
         if: steps.rebase.outputs.conflict == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.REBASE_PAT }}
         run: |
           ISSUE_TITLE="Rebase conflict: debranded onto upstream/main"
           EXISTING=$(gh issue list --state open --search "${ISSUE_TITLE}" --json number --jq '.[0].number // empty')
